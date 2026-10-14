@@ -23,7 +23,7 @@ def test_m6_graph_live(tmp_path: Path) -> None:
     )
     assert result["status"] == "completed"
     assert result["live_evidence"]
-    assert result["report"]["summary"]
+    assert result["report"]["executive_summary"]
 
 
 def test_m6_graph_instance(tmp_path: Path):

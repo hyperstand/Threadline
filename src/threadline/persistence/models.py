@@ -118,6 +118,7 @@ class KnowledgeItemModel(Base):
     __tablename__ = "knowledge_items"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
+    title: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     content: Mapped[str] = mapped_column(Text, nullable=False)
     source_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     system_scope: Mapped[str | None] = mapped_column(String(255), nullable=True)

@@ -1,15 +1,42 @@
 """Separate audit/trace persistence for Threadline."""
 
-"""Separate audit/trace persistence for Threadline."""
-
 from __future__ import annotations
 
-from collections.abc import Callable
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
 from threadline.persistence.models import AuditEventModel
 from threadline.redact import redact_secrets
+
+logger = logging.getLogger("threadline.audit")
+
+
+def record_event(
+    manager: Any,
+    investigation_id: str | None,
+    event_type: str,
+    *,
+    status: str = "completed",
+    **safe_metadata: Any,
+) -> None:
+    """Write one audit event if an audit manager is configured.
+
+    Best-effort: a failed audit write is logged (exception type only) and never
+    raised into the investigation workflow.
+    """
+    if manager is None:
+        return
+    try:
+        manager.record(
+            investigation_id,
+            event_type,
+            status=status,
+            safe_metadata=safe_metadata,
+            correlation_id=investigation_id,
+        )
+    except Exception as exc:
+        logger.error("audit write failed event_type=%s error=%s", event_type, type(exc).__name__)
 
 
 class AuditManager:

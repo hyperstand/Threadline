@@ -21,6 +21,10 @@ READ_ONLY_TOOLS = [
     "get_deployment_metadata",
 ]
 
+# Adapters whose results are canned test data, not observations of a target.
+# Applicability checks and reports must never treat these as confirmed evidence.
+SIMULATED_ADAPTER_NAMES = frozenset({"fake"})
+
 
 @dataclass(frozen=True)
 class ToolInvocation:

@@ -1,12 +1,12 @@
-"""M6 bounded investigation LangGraph."""
+"""M6/M8 bounded investigation LangGraph with per-node audit events (PRD FR-11)."""
 
 from __future__ import annotations
 
-from functools import partial
-from typing import Any
+from typing import Any, Callable
 
 from langgraph.graph import END, START, StateGraph
 
+from threadline.audit import record_event
 from threadline.integrations.goose import FakeGooseAdapter
 from threadline.memory.manager import MemoryManager
 from threadline.orchestration.nodes import (
@@ -23,7 +23,7 @@ from threadline.orchestration.nodes import (
     route_after_evaluation,
 )
 from threadline.orchestration.state import InvestigationState
-from threadline.retrieval.interfaces import RetrievalFilters
+from threadline.redact import redact_secrets
 
 
 def build_investigation_graph(
@@ -40,6 +40,26 @@ def build_investigation_graph(
 
     graph = StateGraph(InvestigationState)
 
+    def audited(node_name: str, node_fn: Callable[[InvestigationState], dict[str, Any]]):
+        def run(state: InvestigationState) -> dict[str, Any]:
+            investigation_id = state.get("investigation_id")
+            try:
+                update = node_fn(state)
+            except Exception as exc:
+                record_event(
+                    audit_manager,
+                    investigation_id,
+                    "workflow.node_failed",
+                    status="failed",
+                    node=node_name,
+                    error=redact_secrets(str(exc))[:300],
+                )
+                raise
+            record_event(audit_manager, investigation_id, "workflow.node_completed", node=node_name)
+            return update
+
+        return run
+
     def initialize(state):
         return initialize_node(state, settings)
 
@@ -53,22 +73,22 @@ def build_investigation_graph(
         def retrieval_func(query, filters, limit):
             if callable(document_retrieval):
                 return document_retrieval(query, filters, limit)
-            try:
-                return memory_manager.retrieve_knowledge(query, filters=filters, limit=limit)
-            except Exception:
-                return []
-        return retrieve_documents_node(state, retrieval_func, state.get("question"))
+            return memory_manager.retrieve_knowledge(query, filters=filters, limit=limit)
+
+        return retrieve_documents_node(state, retrieval_func, state.get("question"), audit_manager=audit_manager)
 
     def gather(state):
-        target_system = state.get("target_system")
-        target_environment = state.get("target_environment")
         return gather_node(
             state,
             goose_adapter,
             getattr(goose_adapter, "policy", goose_adapter) if goose_adapter is not None else None,
-            target_system,
-            target_environment,
+            state.get("target_system"),
+            state.get("target_environment"),
+            audit_manager=audit_manager,
         )
+
+    def applicability(state):
+        return assess_applicability(state, audit_manager=audit_manager)
 
     def evaluate(state):
         update, _ = evaluate_evidence(state)
@@ -77,16 +97,20 @@ def build_investigation_graph(
     def finalizer(state):
         return finalize_node(state, memory_manager, audit_manager)
 
-    graph.add_node("initialize", initialize)
-    graph.add_node("resolve_context", resolve_context)
-    graph.add_node("plan_investigation", plan)
-    graph.add_node("retrieve_documents", retrieve)
-    graph.add_node("gather_live_evidence", gather)
-    graph.add_node("normalize_evidence", normalize_evidence)
-    graph.add_node("assess_applicability", lambda state: assess_applicability(state))
-    graph.add_node("evaluate_evidence", evaluate)
-    graph.add_node("generate_report", generate_report_node)
-    graph.add_node("finalize", finalizer)
+    nodes: dict[str, Callable[[InvestigationState], dict[str, Any]]] = {
+        "initialize": initialize,
+        "resolve_context": resolve_context,
+        "plan_investigation": plan,
+        "retrieve_documents": retrieve,
+        "gather_live_evidence": gather,
+        "normalize_evidence": normalize_evidence,
+        "assess_applicability": applicability,
+        "evaluate_evidence": evaluate,
+        "generate_report": generate_report_node,
+        "finalize": finalizer,
+    }
+    for name, node_fn in nodes.items():
+        graph.add_node(name, audited(name, node_fn))
 
     graph.add_edge(START, "initialize")
     graph.add_edge("initialize", "resolve_context")

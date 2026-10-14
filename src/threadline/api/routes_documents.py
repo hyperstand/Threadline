@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, status
 
 from threadline.ingestion.pipeline import UnsupportedDocumentType, ingest_document
 from threadline.api.schemas import DocumentRead
@@ -11,7 +11,12 @@ router = APIRouter(prefix="/api/v1", tags=["documents"])
 
 
 @router.post("/documents", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
-def upload_document(request: Request, file: UploadFile = File(...)) -> DocumentRead:
+def upload_document(
+    request: Request,
+    file: UploadFile = File(...),
+    system_scope: str | None = Form(default=None),
+    environment_scope: str | None = Form(default=None),
+) -> DocumentRead:
     data = file.file.read()
     session_factory = request.app.state.session_factory
     with session_factory() as session:
@@ -20,6 +25,8 @@ def upload_document(request: Request, file: UploadFile = File(...)) -> DocumentR
                 filename=file.filename or "document",
                 data=data,
                 session=session,
+                system_scope=(system_scope or "").strip() or None,
+                environment_scope=(environment_scope or "").strip() or None,
                 vector_adapter=request.app.state.vector_adapter,
                 embedding_provider=request.app.state.embedding_provider,
             )

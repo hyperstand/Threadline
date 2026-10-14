@@ -55,6 +55,7 @@ class MemoryManager:
         if isinstance(session_factory, tuple):
             _, session_factory = session_factory
         self._session_factory = session_factory
+        self._vector_adapter = vector_adapter
         self._embedding_provider = embedding_provider
         self._checkpointer = checkpoint_manager or CheckpointManager(settings)
         # Keep an in-memory cache only for the current process, never as authority.
@@ -223,18 +224,16 @@ class MemoryManager:
         filters = filters or RetrievalFilters()
         out: list[SemanticKnowledge] = []
         with self._session_factory() as session:
-            # Reuse hybrid retrieval for document/chunk-backed knowledge.
-            try:
-                hybrid_results = hybrid_search(
-                    session,
-                    query,
-                    filters=filters,
-                    limit=limit,
-                    vector_adapter=self._vector_adapter,
-                    embedding_provider=self._embedding_provider,
-                )
-            except Exception:
-                hybrid_results = []
+            # Reuse hybrid retrieval for document/chunk-backed knowledge. Failures propagate
+            # so the caller can record them; a silent empty result hides broken retrieval.
+            hybrid_results = hybrid_search(
+                session,
+                query,
+                filters=filters,
+                limit=limit,
+                vector_adapter=self._vector_adapter,
+                embedding_provider=self._embedding_provider,
+            )
             for result in hybrid_results:
                 out.append(
                     SemanticKnowledge(
@@ -250,6 +249,8 @@ class MemoryManager:
                             "section_path": result.section_path,
                             "heading": result.heading,
                             "search_type": result.search_type,
+                            "system_scope": result.system_scope,
+                            "environment_scope": result.environment_scope,
                         },
                     )
                 )
@@ -281,6 +282,8 @@ class MemoryManager:
                             "title": model.title,
                             "review_status": model.review_status,
                             "provenance": model.provenance,
+                            "system_scope": model.system_scope,
+                            "environment_scope": model.environment_scope,
                         },
                     )
                 )

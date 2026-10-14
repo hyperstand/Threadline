@@ -20,6 +20,7 @@ from threadline.memory.checkpoint import CheckpointManager
 from threadline.orchestration.graph import build_investigation_graph
 from threadline.audit import AuditManager
 from threadline.api.routes_documents import router as documents_router
+from threadline.api.routes_investigations import router as investigations_router
 from threadline.api.routes_retrieval import router as retrieval_router
 from threadline.redact import redact_secrets
 
