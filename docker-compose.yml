@@ -1,0 +1,13 @@
+services:
+  threadline:
+    build: .
+    env_file:
+      - .env
+    environment:
+      THREADLINE_ENV: ${THREADLINE_ENV:-dev}
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///./data/threadline.db}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+# PostgreSQL + pgvector is deferred to a later milestone (see IMPLEMENTATION_PLAN.md).
