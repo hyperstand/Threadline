@@ -6,9 +6,11 @@ import logging
 import uuid
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from threadline import __version__
 from threadline.config import Settings, get_settings
@@ -25,6 +27,14 @@ from threadline.api.routes_retrieval import router as retrieval_router
 from threadline.redact import redact_secrets
 
 RUN_ID_HEADER = "X-Threadline-Run-Id"
+
+UI_DIR = Path(__file__).resolve().parent / "ui"
+# Untrusted document and tool text is rendered by the UI, so scripts and styles may only
+# come from this origin. The page itself has no inline script or style.
+UI_CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+    "connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+)
 
 logger = logging.getLogger("threadline")
 
@@ -86,6 +96,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(investigations_router)
     app.include_router(documents_router)
     app.include_router(retrieval_router)
+
+    app.mount("/ui", StaticFiles(directory=UI_DIR), name="ui")
+    index_html = (UI_DIR / "index.html").read_text(encoding="utf-8")
+
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    def ui_index() -> HTMLResponse:
+        return HTMLResponse(index_html, headers={"Content-Security-Policy": UI_CONTENT_SECURITY_POLICY})
+
     @app.middleware("http")
     async def _run_id_middleware(request: Request, call_next):
         run_id = uuid.uuid4().hex[:16]

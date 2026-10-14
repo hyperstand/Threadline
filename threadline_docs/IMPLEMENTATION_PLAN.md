@@ -1,6 +1,6 @@
 # Threadline — Implementation Plan (M1–M10 Tracker)
 
-**Status:** Active — M8 complete (2026-10-14); M9 (minimal web UI) next
+**Status:** Active — M9 complete (2026-10-14); M10 (security and evaluation pass) next
 **Sources:** `threadline_docs/PRD.md` (Draft v1.0), `threadline_docs/SPEC.md` (v1.0),
 `threadline_docs/IMPLEMENTATION_PROMPT.md`
 **Storage decision (approved):** SQLite + FTS5 local-first; vector optional behind a
@@ -25,7 +25,7 @@ replaceable interface; PostgreSQL + pgvector deferred.
 | M6 | Bounded investigation workflow with fake Goose (FR-04, FR-05 partial) | M5 | implemented & tested (2026-10-14) | LangGraph workflow, fake read-only Goose adapter, policy checks, working-state persistence, investigation API | 42/42 (recorded) |
 | M7 | Real Goose CLI + read-only MCP/tool policy (FR-05/12) | M6 | implemented & tested (2026-10-14) | Config-gated MCP/JSON-RPC stdio adapter, read-only policy, timeouts, output limits, secret redaction, availability fallback | 47/47 (recorded) |
 | M8 | Applicability checks + structured report + audit history (FR-06/07/11) | M6–M7 | **implemented & tested (2026-10-14)** | `confirmed/contradicted/unknown` (unknown ≠ confirmed; simulated results never confirm); typed FR-07 report with validated citations; audit events separate from memory; investigation history endpoint | 84/84 (full suite) |
-| M9 | Minimal web UI | M8 | pending | Library/workspace/report/history screens; API usable without UI | — |
+| M9 | Minimal web UI | M8 | **implemented & checked in Chrome (2026-10-14)** | Library, Workspace, History, and Report screens over the existing API; API usable without UI | 91/91 (full suite); UI exercised end-to-end in a browser |
 | M10 | Security + evaluation pass, reproducible setup | M1–M9 | pending | Prompt-injection, scope-escape, secret-redaction suites; eval metrics reported as measured, not claimed | — |
 
 Results for M1–M7 are as recorded at the time. The full suite was re-run at the start
@@ -89,6 +89,24 @@ suite and reading the code, and were fixed before M8 work:
 - Route naming: SPEC §10 says `/investigations/{id}/events`; the implemented route is
   `/investigations/{id}/audit-events`.
 
+## M9 build notes
+
+- **Stack:** one HTML page plus `app.css` and `app.js` in `src/threadline/ui/`, served by
+  FastAPI at `/` with `/ui/*` static files. No build step and no Node toolchain. This is
+  the lighter option instead of the Next.js + TypeScript proposed in SPEC §3. Revisit if
+  the UI grows past these four screens.
+- **Screens:** Library (upload with optional scope, list documents), Workspace (ask a
+  question, choose live or documents-only), History (recent investigations), Report
+  (full FR-07 report, with simulated facts labelled and an on-demand audit trail).
+- **Security:** the page is served with a strict CSP (`script-src 'self'`, no inline
+  script or style). `app.js` never uses `innerHTML` or similar sinks, so document text and
+  tool output cannot inject markup. A test enforces this.
+- **Browser check:** the four screens were run in Chrome against a seeded server. Upload
+  and list, submit and open a report, history, and the audit trail all worked, with no
+  console errors.
+- **Not covered:** no authentication. Anyone who can reach the server can use the UI and
+  the API. See the open decisions.
+
 ## Requirements coverage (PRD FR-01–FR-13)
 
 - FR-01 ingestion, FR-02 provenance, FR-03 retrieval: implemented (M2–M4).
@@ -115,7 +133,10 @@ suite and reading the code, and were fixed before M8 work:
   (b) default to document-only, so no simulated observations are produced outside tests.
 - Exact OpenAI-compatible model and embedding model names — required before hypothesis
   generation (model wiring, not yet started).
-- Production auth provider beyond `THREADLINE_API_TOKEN` fail-closed stub (M10).
+- **Authentication (needs a decision before any shared deployment):** `THREADLINE_API_TOKEN`
+  is only checked at startup in prod mode. No route enforces it, so the API and UI are open
+  to anyone who can reach the server. Options: a bearer-token check on all `/api/v1` routes,
+  or leave it local-only. Production auth provider is still open (M10).
 - Document retention/deletion policy (M10).
 - Postgres + pgvector migration trigger (post-MVP or on multi-user need). Schema changes
   before then need recreated local databases; migrations come with Alembic.

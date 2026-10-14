@@ -23,7 +23,7 @@ Plan and status: `threadline_docs/IMPLEMENTATION_PLAN.md`.
 | Live evidence: Goose over MCP, read-only policy | Implemented; off by default |
 | Applicability checks, structured report, audit history | Implemented (M8) |
 | Hypothesis generation | Not implemented: no model is wired yet |
-| Web UI | Pending (M9) |
+| Web UI: Library, Workspace, History, Report | Implemented (M9); open http://127.0.0.1:8000/ |
 | Security and evaluation suites, PostgreSQL | Pending (M10) |
 
 ## Local setup
@@ -47,6 +47,12 @@ Invoke-RestMethod http://127.0.0.1:8000/health
 
 Expected: `{"status":"ok","version":"0.1.0","env":"dev",...}` plus an
 `X-Threadline-Run-Id` response header.
+
+Open **http://127.0.0.1:8000/** in a browser for the web UI: Library (upload and list
+documents), Workspace (ask a question), History, and Report (one investigation in full,
+with its audit trail). The UI calls the same API, so it has no extra setup.
+
+The UI has no authentication yet. Run it on a local machine only.
 
 The test suite runs offline. It needs no model credentials and no Goose binary.
 

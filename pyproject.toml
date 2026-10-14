@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "threadline"
 version = "0.1.0"
-description = "Threadline — evidence-driven operational knowledge and investigation agent (M1 skeleton)"
+description = "Threadline — evidence-driven operational knowledge and investigation agent"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "TBD" }
@@ -26,6 +26,9 @@ test = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+threadline = ["ui/*.html", "ui/*.css", "ui/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
