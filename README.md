@@ -1,4 +1,4 @@
-# Threadline (M8)
+# Threadline (M9)
 
 Evidence-driven operational knowledge and investigation agent.
 
@@ -22,8 +22,9 @@ Plan and status: `threadline_docs/IMPLEMENTATION_PLAN.md`.
 | Investigation workflow: bounded LangGraph with per-node audit | Implemented |
 | Live evidence: Goose over MCP, read-only policy | Implemented; off by default |
 | Applicability checks, structured report, audit history | Implemented (M8) |
+| Web UI: Library, Workspace, History, Report | Implemented (M9) |
 | Hypothesis generation | Not implemented: no model is wired yet |
-| Web UI: Library, Workspace, History, Report | Implemented (M9); open http://127.0.0.1:8000/ |
+| Authentication | Not implemented: no route enforces a token |
 | Security and evaluation suites, PostgreSQL | Pending (M10) |
 
 ## Local setup
@@ -39,6 +40,8 @@ pytest -v
 uvicorn threadline.main:app --reload --port 8000
 ```
 
+The test suite runs offline. It needs no model credentials and no Goose binary.
+
 Health check:
 
 ```powershell
@@ -48,13 +51,19 @@ Invoke-RestMethod http://127.0.0.1:8000/health
 Expected: `{"status":"ok","version":"0.1.0","env":"dev",...}` plus an
 `X-Threadline-Run-Id` response header.
 
-Open **http://127.0.0.1:8000/** in a browser for the web UI: Library (upload and list
-documents), Workspace (ask a question), History, and Report (one investigation in full,
-with its audit trail). The UI calls the same API, so it has no extra setup.
+## Web UI
 
-The UI has no authentication yet. Run it on a local machine only.
+Open **http://127.0.0.1:8000/** in a browser:
 
-The test suite runs offline. It needs no model credentials and no Goose binary.
+- **Library:** upload a document with optional system and environment scope, and list
+  the indexed documents.
+- **Workspace:** ask a question about a target system and environment. Choose live
+  evidence or documents only.
+- **History:** recent investigations, newest first.
+- **Report:** one investigation in full, with an on-demand audit trail.
+
+The UI calls the same API, so it needs no extra setup. It has no authentication, so run
+it on a local machine only.
 
 ## Typical workflow
 
@@ -67,13 +76,16 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/v1/investigations -Cont
   -Body '{"question":"postgres replication lag","target_system":"postgres","target_environment":"dev"}'
 ```
 
-Routes (all under `/api/v1`):
+Routes:
 
-- `POST /documents`, `GET /documents`, `GET /documents/{id}`
-- `POST /investigations` (`mode`: `live` or `document_only`), `GET /investigations?limit=`
-  (history), `GET /investigations/{id}`, `POST .../resume`, `POST .../cancel`
-- `GET /investigations/{id}/report`, `.../evidence`, `.../audit-events`
-- `GET /search`, `POST /answers`
+- `GET /`: the web UI. Static files are served under `/ui/`.
+- `GET /health`: liveness and version.
+- Under `/api/v1`:
+  - `POST /documents`, `GET /documents`, `GET /documents/{id}`
+  - `POST /investigations` (`mode`: `live` or `document_only`), `GET /investigations?limit=`
+    (history), `GET /investigations/{id}`, `POST .../resume`, `POST .../cancel`
+  - `GET /investigations/{id}/report`, `.../evidence`, `.../audit-events`
+  - `GET /search`, `POST /answers`
 
 ## Reading a report
 
@@ -96,15 +108,40 @@ See `.env.example`. Key settings:
   Set `true` with `GOOSE_COMMAND` to use a real Goose MCP server. If that command is not
   available, the app runs document-only and records a limitation.
 - `VECTOR_ENABLED`: optional in-memory vector retrieval.
-- `THREADLINE_ENV=prod` requires `THREADLINE_API_TOKEN` and fails closed without it.
+- `THREADLINE_ENV=prod` requires `THREADLINE_API_TOKEN` at startup and fails closed
+  without it. The token is not yet enforced on any route.
 
 Database schema changes need the local SQLite file to be recreated until migrations
 arrive. Delete the file under `data/` and restart.
 
+## Project layout
+
+```text
+src/threadline/
+  api/            HTTP routes and response schemas
+  audit/          audit events, separate from memory
+  evidence/       applicability verifier, report schema, citation validation
+  ingestion/      document extraction, chunking, provenance
+  integrations/   Goose adapters (fake and real MCP) and the read-only tool policy
+  memory/         working, episodic, and semantic memory; checkpoints
+  orchestration/  LangGraph investigation workflow and its nodes
+  persistence/    SQLAlchemy models and database setup
+  retrieval/      keyword (FTS5), vector, and hybrid search
+  ui/             single-page web UI (index.html, app.css, app.js)
+tests/
+  unit/           unit tests for each module
+  integration/    API and end-to-end tests
+threadline_docs/  PRD, SPEC, implementation prompt, and the milestone plan
+```
+
 ## Known limitations
 
-- `MAX_TOOL_CALLS` is loaded but not enforced yet (see the plan's M8 gaps).
+- No authentication on any route, including the UI. Anyone who can reach the server can
+  read documents, run investigations, and see audit events. Run locally only until a
+  decision is made (see the plan's open decisions).
+- `MAX_TOOL_CALLS` is loaded but not enforced yet. The plan's M8 gaps list this.
 - Normalized evidence is not persisted as separate records. Evidence lives in the report.
-- No authentication beyond the production token check. Not for multi-user deployment.
+- Observed-fact excerpts show the tool result as Python repr text, not formatted JSON.
 - Applicability uses deterministic scope metadata only. It does not parse procedure
   prerequisites from document text.
+- Hypothesis generation needs a model adapter, and none is wired in.
